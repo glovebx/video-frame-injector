@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from scene_detector import SceneDetector
 from frame_injector import FrameInjector
 
+MAX_VIDEO_SIZE = 20 * 1024 * 1024  # 20 MB
 
 app = FastAPI(title="Meta Video Scene Processor")
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
@@ -49,6 +50,21 @@ async def detect_scenes(
     - 返回 job_id，用于后续注入
     - 图片和 JSON 打包在 job 目录中
     """
+
+    hasSizeChecked = False
+    # 检查文件大小（通过 Content-Length 或先读取一部分）
+    # 方法1：使用 Content-Length 头（可靠）
+    if video.size:
+        hasSizeChecked = True
+        if video.size > MAX_VIDEO_SIZE:
+            error_response = ProcessResponse(
+                job_id="",
+                scenes_json="",
+                images_archive=None,
+                message=f"Video file size bytes exceeds limit of {MAX_VIDEO_SIZE} bytes (20MB)"
+            )
+            return error_response
+    
     job_id = str(uuid.uuid4())[:8]
     job_dir = BASE_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -57,6 +73,15 @@ async def detect_scenes(
     video_path = job_dir / video.filename
     with open(video_path, "wb") as f:
         content = await video.read()
+        if not hasSizeChecked and len(content) > MAX_VIDEO_SIZE:
+            error_response = ProcessResponse(
+                job_id="",
+                scenes_json="",
+                images_archive=None,
+                message=f"Video file size bytes exceeds limit of {MAX_VIDEO_SIZE} bytes (20MB)"
+            )
+            return error_response
+        
         f.write(content)
     
     # 异步处理（大视频可能耗时较长）
