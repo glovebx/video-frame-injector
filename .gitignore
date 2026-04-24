@@ -3,6 +3,11 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# 环境文件
+.env
+*.env.local
+*.env.*.local
+
 .DS_Store
 .vscode
 

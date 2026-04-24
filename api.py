@@ -14,8 +14,17 @@ from frame_injector import FrameInjector
 
 MAX_VIDEO_SIZE = 20 * 1024 * 1024  # 20 MB
 
+# 方法2：使用配置模块
+from config import settings
+
 app = FastAPI(title="Meta Video Scene Processor")
-app.add_middleware(CORSMiddleware, allow_origins=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.get_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],  # 允许所有HTTP方法
+    allow_headers=["*"],  # 允许所有请求头
+)
 
 # 存储目录
 BASE_DIR = Path("./output")
@@ -220,4 +229,4 @@ async def job_status(job_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8200)
+    uvicorn.run(app, host="0.0.0.0", port=8078)
