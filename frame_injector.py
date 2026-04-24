@@ -110,49 +110,48 @@ class FrameInjector:
             "duration": float(data["format"]["duration"])
         }
 
-    def _create_image_segment(
-        self,
-        img_path: str,
-        video_path: str,
-        start: float,
-        end: float,
-        output: str,
-        width: int,
-        height: int,
-        fps: float,
-    ):
-        duration = end - start
-        # 图片缩放并填充至目标分辨率
-        scale_filter = (
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black"
-        )
+    # def _create_image_segment(
+    #     self,
+    #     img_path: str,
+    #     video_path: str,
+    #     start: float,
+    #     end: float,
+    #     output: str,
+    #     width: int,
+    #     height: int,
+    #     fps: float,
+    # ):
+    #     duration = end - start
+    #     # 图片缩放并填充至目标分辨率
+    #     scale_filter = (
+    #         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+    #         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black"
+    #     )
 
-        # 输入0: 图片循环; 输入1: 原视频（提取音频）
-        cmd = [
-            "ffmpeg", "-y",
-            "-loop", "1",
-            "-i", img_path,
-            "-ss", str(start),
-            "-t", str(duration),
-            "-i", video_path,
-            "-filter_complex",
-            f"[0:v]{scale_filter}[v];"
-            f"[1:a]aresample=48000[a]",
-            "-map", "[v]",
-            "-map", "[a]",
-            "-c:v", self.video_codec,
-            "-crf", str(self.crf),
-            "-preset", self.preset,
-            "-t", str(duration),
-            "-r", str(fps),
-            "-pix_fmt", "yuv420p",
-            "-c:a", self.audio_codec,
-            "-b:a", "192k",
-            "-shortest",
-            output
-        ]
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    #     # 输入0: 图片循环; 输入1: 原视频（提取音频）
+    #     cmd = [
+    #         "ffmpeg", "-y",
+    #         "-loop", "1",
+    #         "-i", img_path,
+    #         "-ss", str(start),
+    #         "-t", str(duration),
+    #         "-i", video_path,
+    #         "-filter_complex",
+    #         f"[0:v]{scale_filter}[v];"
+    #         f"[1:a]aresample=48000[a]",
+    #         "-map", "[v]",
+    #         "-map", "[a]",
+    #         "-c:v", self.video_codec,
+    #         "-crf", str(self.crf),
+    #         "-preset", self.preset,
+    #         "-t", str(duration),
+    #         "-pix_fmt", "yuv420p",
+    #         "-c:a", self.audio_codec,
+    #         "-b:a", "192k",
+    #         "-shortest",
+    #         output
+    #     ]
+    #     subprocess.run(cmd, check=True, capture_output=True, text=True)
 
     def _concat_segments(self, segments: List[str], output_path: str, temp_dir: str):
         concat_list = os.path.join(temp_dir, "concat_list.txt")
@@ -176,41 +175,71 @@ class FrameInjector:
             output_path
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-
-    # def _concat_segments(self, segments: List[str], output_path: str, temp_dir: str):
-    #     concat_list = os.path.join(temp_dir, "concat_list.txt")
-    #     with open(concat_list, "w", encoding="utf-8") as f:
-    #         for seg in segments:
-    #             f.write(f"file '{seg}'\n")
-
-    #     # 优先尝试直接复制流（速度最快）
-    #     cmd = [
-    #         "ffmpeg", "-y",
-    #         "-f", "concat",
-    #         "-safe", "0",
-    #         "-i", concat_list,
-    #         "-c", "copy",
-    #         "-movflags", "+faststart",
-    #         output_path
-    #     ]
-    #     result = subprocess.run(cmd, capture_output=True, text=True)
-    #     if result.returncode != 0:
-    #         if self.verbose:
-    #             print("Direct concat failed, re-encoding...")
-    #         cmd = [
-    #             "ffmpeg", "-y",
-    #             "-f", "concat",
-    #             "-safe", "0",
-    #             "-i", concat_list,
-    #             "-c:v", self.video_codec,
-    #             "-crf", str(self.crf),
-    #             "-preset", self.preset,
-    #             "-c:a", self.audio_codec,
-    #             "-b:a", "192k",
-    #             "-movflags", "+faststart",
-    #             output_path
-    #         ]
-    #         subprocess.run(cmd, check=True, capture_output=True, text=True)
+        
+    def _create_image_segment(
+        self,
+        img_path: str,
+        video_path: str,
+        start: float,
+        end: float,
+        output: str,
+        width: int,
+        height: int,
+        fps: float,
+    ):
+        duration = end - start
+        
+        # 检查原视频是否有音频流
+        probe_cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a",
+            "-show_entries", "stream=codec_type",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            video_path
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        has_audio = (result.returncode == 0 and result.stdout.strip() != "")
+        
+        # 缩放 + 填充 + 设置帧率
+        filter_video = f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}[v]"
+        
+        if has_audio:
+            filter_audio = "[1:a]aresample=48000[a]"
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", img_path,
+                "-ss", str(start), "-t", str(duration), "-i", video_path,
+                "-filter_complex", f"{filter_video};{filter_audio}",
+                "-map", "[v]", "-map", "[a]",
+                "-c:v", self.video_codec, "-crf", str(self.crf), "-preset", self.preset,
+                "-t", str(duration), "-pix_fmt", "yuv420p",
+                "-c:a", self.audio_codec, "-b:a", "192k",
+                "-shortest", output
+            ]
+        else:
+            # 无音频：生成静音源
+            cmd = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-i", img_path,
+                "-ss", str(start), "-t", str(duration), "-i", video_path,
+                "-filter_complex",
+                f"{filter_video};anullsrc=r=48000:cl=stereo[a]",
+                "-map", "[v]", "-map", "[a]",
+                "-c:v", self.video_codec, "-crf", str(self.crf), "-preset", self.preset,
+                "-t", str(duration), "-pix_fmt", "yuv420p",
+                "-c:a", self.audio_codec, "-b:a", "192k",
+                "-shortest", output
+            ]
+        
+        if self.verbose:
+            print(f"Creating segment: {output}")
+            print("FFmpeg command:", " ".join(cmd))
+        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print("FFmpeg stderr:", e.stderr)
+            raise
 
 
 if __name__ == "__main__":
