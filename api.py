@@ -46,7 +46,7 @@ class InjectRequest(BaseModel):
     modified_images_dir: Optional[str] = None
 
 
-@app.post("/api/v1/detect-scenes", response_model=ProcessResponse)
+@app.post("/videoinjector/api/v1/detect-scenes", response_model=ProcessResponse)
 async def detect_scenes(
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
@@ -121,7 +121,7 @@ async def detect_scenes(
     )
 
 
-@app.post("/api/v1/inject-frames")
+@app.post("/videoinjector/api/v1/inject-frames")
 async def inject_frames(
     job_id: str = Form(...),
     modified_images: Optional[UploadFile] = File(None),  # 上传 zip 或单文件
@@ -192,7 +192,7 @@ async def inject_frames(
     }
 
 
-@app.get("/api/v1/jobs/{job_id}/{path:path}")
+@app.get("/videoinjector/api/v1/jobs/{job_id}/{path:path}")
 async def download_file(job_id: str, path: str):
     """下载 job 中的文件"""
     file_path = BASE_DIR / job_id / path
@@ -206,7 +206,7 @@ async def download_file(job_id: str, path: str):
     )
 
 
-@app.get("/api/v1/jobs/{job_id}/status")
+@app.get("/videoinjector/api/v1/jobs/{job_id}/status")
 async def job_status(job_id: str):
     """查询 job 状态"""
     job_dir = BASE_DIR / job_id
